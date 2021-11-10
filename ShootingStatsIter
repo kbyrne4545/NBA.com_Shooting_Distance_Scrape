@@ -1,0 +1,81 @@
+#WEBSCRAPING NBA.COM FOR PLAYERS SHOOTING STATISTICS USING SELENIUM
+
+from selenium.webdriver import Chrome
+from selenium.webdriver.support.ui import Select
+from bs4 import BeautifulSoup
+import pandas as pd
+import time
+
+#CHECK GITHUB PROJECT HOME FOR CSV FILE OF NBA.COM PLAYER IDs
+playerdf = pd.read_csv('xxxxx')
+
+df2 = pd.DataFrame()
+
+for pid in playerdf.itertuples():
+    player_name = pid[1]
+    player_id = str(pid[2])
+    
+    url = 'https://www.nba.com/stats/player/' + player_id + "/shooting/"
+    browser = Chrome(executable_path='/usr/local/bin/chromedriver')
+    browser.get(url)
+    
+    try:
+        #SELECTING THE SEASON DROPDOWN BOX TO ITERATE THROUGH
+        select = Select(browser.find_element_by_xpath('/html/body/main/div/div/div/div[4]/div/div/div/div/div[1]/div[1]/div/div/label/select'))
+        options = select.options
+        
+        
+        for index in range(0, len(options)):
+            select.select_by_index(index)
+            
+            #THE BIGGEST ISSUE WITH THIS SCRIPT WAS ALLOWING THE WEBPAGE TO LOAD AFTER EACH SEASON IS SELECTED BEFORE THE SOURCE 
+            #CODE WAS SAVED TO src. I USED A SIMPLE SLEEP PAUSE AS A WORKAROUND. YOU CAN ADJUST THIS TO SPEED RUNNING THE CODE UP
+            time.sleep(4)
+            
+            src = browser.page_source
+            parser = BeautifulSoup(src, "lxml") 
+            table = parser.findAll("div", attrs = {"class":"nba-stat-table__overflow"})
+        
+            headers = table[1].findAll('th')
+            headerlist = [h.text.strip() for h in headers[1:]]
+            headerlist = [a for a in headerlist if not '\n' in a]
+            headerlist.append('AST%')
+            headerlist.append('UAST%')
+        
+            row_labels = table[1].findAll("td", {"class": "first"})
+            row_labels_list = [r.text.strip() for r in row_labels[0:]]
+        
+            rows = table[1].findAll('tr')[1:]
+            player_stats = [[td.getText().strip() for td in rows[i].findAll('td')[1:]] for i in range(len(rows))]
+            
+            df = pd.DataFrame(data=player_stats, columns=headerlist, index = row_labels_list)
+            df.insert(loc = 0, column = 'Player', value = player_name)
+            
+            try:
+                burl = str((browser.current_url))
+                yearstart = burl.find('Season=')
+    
+                if yearstart == -1:
+                    year = str('2021-2022')
+                else:
+                    yearstart = yearstart + 7
+                    yearend = burl.find('&SeasonType', yearstart)
+                    year = burl[yearstart:yearend]
+            except:
+                year = 'Na'
+            
+            df.insert(loc = 0, column = 'Season', value = year)
+            
+            df2 = df2.append(df)
+            
+    #NOT THE BEST PRACTICE, BUT ABOUT ONCE PER RUN THE WEBPAGE WOULD BE A FRACTIONAL SECOND TOO LONG TO LOAD AFTER THE SLEEP TIMER, CAUSING THE CODE TO CRASH
+    except:
+        pass
+        
+        
+print(df2)    
+
+
+
+
+
